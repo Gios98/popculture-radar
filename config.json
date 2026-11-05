@@ -81,7 +81,7 @@
     { "name": "Fumettologica", "url": "https://fumettologica.it/feed/", "lang": "it", "tier": "major", "category": "fumetti" },
     { "name": "Lo Spazio Bianco", "url": "https://www.lospaziobianco.it/feed/", "lang": "it", "tier": "blog", "category": "fumetti" },
     { "name": "BadTaste.it", "url": "https://www.badtaste.it/feed/", "lang": "it", "tier": "major", "category": "film" },
-    { "name": "Cinematographe", "url": "https://www.cinematographe.it/feed/", "lang": "it", "tier": "blog", "category": "film" },
+    { "name": "Cinematographe", "url": "https://www.cinematographe.it/feed/", "lang": "it", "tier": "blog", "category": "film", "enabled": false, "note": "Verificato il 5/11/2026: il sito rifiuta i programmi automatici (errore 403)" },
     { "name": "Nerdpool", "url": "https://www.nerdpool.it/feed/", "lang": "it", "tier": "blog", "category": "altro" },
 
     {
@@ -92,12 +92,12 @@
       "note": "Metti qui il feed del vostro sito e porta enabled a true: il Radar non vi notificherà notizie che avete già pubblicato."
     },
 
-    { "name": "Everyeye.it", "url": "https://www.everyeye.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi", "enabled": false, "note": "URL da verificare con --check-sources --all" },
-    { "name": "Multiplayer.it", "url": "https://multiplayer.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi", "enabled": false, "note": "URL da verificare con --check-sources --all" },
-    { "name": "Movieplayer.it", "url": "https://movieplayer.it/rss/", "lang": "it", "tier": "major", "category": "film", "enabled": false, "note": "URL da verificare con --check-sources --all" },
-    { "name": "AnimeClick", "url": "https://www.animeclick.it/rss/news", "lang": "it", "tier": "blog", "category": "anime", "enabled": false, "note": "URL da verificare con --check-sources --all" },
+    { "name": "Everyeye.it", "url": "https://www.everyeye.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi" },
+    { "name": "Multiplayer.it", "url": "https://multiplayer.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi", "enabled": false, "note": "Verificato il 5/11/2026: non funziona (feed non valido o non trovato)" },
+    { "name": "Movieplayer.it", "url": "https://movieplayer.it/rss/", "lang": "it", "tier": "major", "category": "film", "enabled": false, "note": "Verificato il 5/11/2026: non funziona (feed non valido o non trovato)" },
+    { "name": "AnimeClick", "url": "https://www.animeclick.it/rss/news", "lang": "it", "tier": "blog", "category": "anime", "enabled": false, "note": "Verificato il 5/11/2026: non funziona (feed non valido o non trovato)" },
 
-    { "name": "Reddit r/anime", "url": "https://www.reddit.com/r/anime/hot/.rss", "lang": "en", "tier": "community", "category": "anime", "enabled": false, "note": "Reddit spesso blocca i server di GitHub: prova con --check-sources --all" },
+    { "name": "Reddit r/anime", "url": "https://www.reddit.com/r/anime/hot/.rss", "lang": "en", "tier": "community", "category": "anime", "enabled": false, "note": "Verificato il 5/11/2026: risponde solo a volte, Reddit blocca spesso (errore 429)" },
     { "name": "Reddit r/movies", "url": "https://www.reddit.com/r/movies/hot/.rss", "lang": "en", "tier": "community", "category": "film", "enabled": false },
     { "name": "Reddit r/comicbooks", "url": "https://www.reddit.com/r/comicbooks/hot/.rss", "lang": "en", "tier": "community", "category": "fumetti", "enabled": false }
   ]
