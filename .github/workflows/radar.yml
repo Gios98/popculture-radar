@@ -1,0 +1,87 @@
+name: PopCulture Radar
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Cosa vuoi fare?"
+        type: choice
+        default: run
+        options:
+          - run
+          - dry-run
+          - check-sources
+          - check-llm
+          - test-notify
+          - chat-id
+          - digest-now
+
+permissions:
+  contents: write
+
+concurrency:
+  group: popculture-radar
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUNBUFFERED: "1"
+      MODE: ${{ github.event.inputs.mode || 'run' }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Carica la memoria
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STATE_DIR="$RUNNER_TEMP/radar-state"
+          echo "STATE_PATH=$STATE_DIR/state.json" >> "$GITHUB_ENV"
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REPO_URL" radar-state >/dev/null 2>&1; then
+            git clone --quiet --depth=1 --branch radar-state "$REPO_URL" "$STATE_DIR"
+          else
+            mkdir -p "$STATE_DIR"
+            git -C "$STATE_DIR" init --quiet -b radar-state
+            git -C "$STATE_DIR" remote add origin "$REPO_URL"
+          fi
+
+      - name: Esegui il Radar
+        run: |
+          case "$MODE" in
+            run)            python3 radar.py ;;
+            dry-run)        python3 radar.py --dry-run ;;
+            check-sources)  python3 radar.py --check-sources --all ;;
+            check-llm)      python3 radar.py --check-llm ;;
+            test-notify)    python3 radar.py --test-notify ;;
+            chat-id)        python3 radar.py --telegram-chat-id ;;
+            digest-now)     python3 radar.py --digest-now ;;
+            *) echo "Modalità sconosciuta: $MODE"; exit 2 ;;
+          esac
+
+      - name: Salva la memoria
+        if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now') }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/radar-state"
+          [ -f state.json ] || exit 0
+          git config user.name "radar-bot"
+          git config user.email "radar-bot@users.noreply.github.com"
+          git add state.json
+          if git rev-parse --verify HEAD >/dev/null 2>&1; then
+            git commit --quiet --amend --allow-empty -m "radar state"
+          else
+            git commit --quiet --allow-empty -m "radar state"
+          fi
+          git push --quiet --force origin radar-state
