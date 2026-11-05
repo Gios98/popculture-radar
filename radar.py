@@ -876,7 +876,7 @@ class GroqProvider:
 
 
 def build_providers(state, cfg=None):
-    order = [p.strip().lower() for p in (env("LLM_PROVIDERS") or "gemini,groq").split(",") if p.strip()]
+    order = [p.strip().lower() for p in (env("LLM_PROVIDERS") or "groq,gemini").split(",") if p.strip()]
     table = {"gemini": GeminiProvider, "groq": GroqProvider}
     forced = (cfg or {}).get("llm_models") or {}
     out = []
