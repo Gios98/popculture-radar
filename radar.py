@@ -36,6 +36,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,6 +48,8 @@ except ImportError:  # pragma: no cover
 
 BASE = Path(__file__).resolve().parent
 UA = "Mozilla/5.0 (compatible; PopCultureRadar/1.0)"
+
+MAX_RATING_ATTEMPTS = 6  # quante volte riprovare a far valutare una notizia prima di lasciarla perdere
 
 TIER_PRIORITY = {"official": 0, "trade": 1, "major": 2, "blog": 3, "community": 4}
 CATEGORIES = ["anime", "manga", "fumetti", "film", "serie_tv", "videogiochi", "altro"]
@@ -71,7 +74,8 @@ DEFAULT_CONFIG = {
     "story_ttl_hours": 72,
     "max_items_per_source": 30,
     "max_clusters_per_run": 36,
-    "batch_size": 12,
+    "batch_size": 8,
+    "llm_retry_seconds": [6, 20],
     "batch_delay_seconds": 4,
     "max_notifications_per_run": 5,
     "health_warn_after_failures": 12,
@@ -291,6 +295,21 @@ class HttpError(Exception):
         super().__init__(("HTTP %s %s" % (status, msg)).strip() if status else (msg or "errore di rete"))
 
 
+def _error_body(e) -> str:
+    """Testo leggibile dell'errore: decomprime il gzip e toglie tag e caratteri strani."""
+    try:
+        raw = e.read(20000)
+        if (e.headers.get("Content-Encoding") or "").lower() == "gzip":
+            raw = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw)
+        text = raw.decode("utf-8", "replace")
+    except Exception:
+        return ""
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = "".join(ch if ch.isprintable() else " " for ch in html.unescape(text))
+    return re.sub(r"\s+", " ", text).strip()[:200]
+
+
 def http(url, *, data=None, headers=None, method=None, timeout=25, max_bytes=6_000_000):
     h = {"User-Agent": UA, "Accept-Encoding": "gzip", "Accept": "*/*"}
     if headers:
@@ -307,11 +326,7 @@ def http(url, *, data=None, headers=None, method=None, timeout=25, max_bytes=6_0
                     raise HttpError(0, "risposta troppo grande")
             return raw
     except urllib.error.HTTPError as e:
-        try:
-            body = e.read(300).decode("utf-8", "replace")
-        except Exception:
-            body = ""
-        raise HttpError(e.code, re.sub(r"\s+", " ", body)[:200]) from None
+        raise HttpError(e.code, _error_body(e)) from None
     except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
         raise HttpError(0, "rete: " + type(e).__name__) from None
 
@@ -571,6 +586,41 @@ def extract_json(text: str):
     return json.loads(m.group(0))
 
 
+def salvage_items(text: str):
+    """Recupera le valutazioni valide anche quando il JSON completo è rotto (es. un due punti mancante)."""
+    dec, out, i, t = json.JSONDecoder(), [], 0, text or ""
+    while True:
+        i = t.find("{", i)
+        if i < 0:
+            return out
+        try:
+            obj, end = dec.raw_decode(t, i)
+        except json.JSONDecodeError:
+            i += 1
+            continue
+        if isinstance(obj, dict) and "id" in obj and ("impact" in obj or "audience_fit" in obj):
+            out.append(obj)
+            i = end
+        else:
+            i += 1  # entra negli oggetti annidati, es. {"items": [...]}
+
+
+def parse_rating_rows(text: str):
+    try:
+        data = extract_json(text)
+        rows = data.get("items") if isinstance(data, dict) else data
+        if isinstance(rows, list):
+            rows = [r for r in rows if isinstance(r, dict)]
+            if rows:
+                return rows
+    except (ValueError, json.JSONDecodeError):
+        pass
+    rows = salvage_items(text)
+    if rows:
+        log("  recuperate %d valutazioni da una risposta con JSON rotto" % len(rows))
+    return rows
+
+
 def _num(v, default=0.0):
     try:
         x = float(v)
@@ -607,6 +657,14 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo e senza blocc
 Devi restituire esattamente un elemento per ogni notizia ricevuta, con lo stesso id. I punteggi sono numeri da 0 a 10.
 """.strip()
 
+_S, _N, _B = {"type": "STRING"}, {"type": "NUMBER"}, {"type": "BOOLEAN"}
+RESPONSE_SCHEMA = {"type": "OBJECT", "properties": {"items": {"type": "ARRAY", "items": {
+    "type": "OBJECT",
+    "properties": {"id": _S, "ignore": _B, "category": _S, "reliability": _S, "impact": _N, "audience_fit": _N,
+                   "traffic": _N, "headline_it": _S, "why": _S, "angle": _S, "franchise": _S},
+    "required": ["id", "ignore", "category", "reliability", "impact", "audience_fit", "traffic", "headline_it", "why", "angle"]}}},
+    "required": ["items"]}
+
 GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-flash-latest"]
 GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
@@ -634,11 +692,25 @@ class GeminiProvider:
         return bool(self.key)
 
     def _generate(self, model, system, user):
+        use_schema = self.state["llm"].get("gemini_schema", True)
+        try:
+            return self._request(model, system, user, use_schema)
+        except LLMError as e:
+            if use_schema and (e.kind == "bad" or "schema" in str(e).lower()):  # schema non accettato: riprova senza
+                text = self._request(model, system, user, False)
+                self.state["llm"]["gemini_schema"] = False
+                return text
+            raise
+
+    def _request(self, model, system, user, schema):
         url = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent" % model
+        gen = {"temperature": 0.2, "responseMimeType": "application/json"}
+        if schema:
+            gen["responseSchema"] = RESPONSE_SCHEMA
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
+            "generationConfig": gen,
         }
         try:
             raw = http(url, data=json.dumps(body).encode("utf-8"), method="POST", timeout=90,
@@ -787,20 +859,30 @@ def cluster_payload(c: Cluster, now):
 class LLMRater:
     def __init__(self, cfg, providers, system_prompt, now):
         self.cfg, self.providers, self.system, self.now = cfg, providers, system_prompt, now
+        self.dead = set()
 
     def _rate_batch(self, user):
+        delays = list(self.cfg.get("llm_retry_seconds", [6, 20]))
         for p in self.providers:
-            try:
-                text = p.generate(self.system, user)
-                data = extract_json(text)
-                rows = data.get("items") if isinstance(data, dict) else data
-                if not isinstance(rows, list):
-                    raise ValueError("JSON senza lista 'items'")
-                return [r for r in rows if isinstance(r, dict)]
-            except LLMError as e:
-                log("  [%s] %s" % (p.name, e))
-            except (ValueError, KeyError, json.JSONDecodeError) as e:
-                log("  [%s] risposta non leggibile: %s" % (p.name, e))
+            if p.name in self.dead:
+                continue
+            for attempt in range(len(delays) + 1):
+                try:
+                    text = p.generate(self.system, user)
+                except LLMError as e:
+                    log("  [%s] %s" % (p.name, e))
+                    if e.kind == "server" and attempt < len(delays):  # sovraccarico temporaneo: aspetta e riprova
+                        time.sleep(delays[attempt])
+                        continue
+                    if e.kind in ("auth", "quota"):  # inutile insistere per il resto del giro
+                        self.dead.add(p.name)
+                    break
+                rows = parse_rating_rows(text)
+                if rows:
+                    return rows
+                log("  [%s] risposta non leggibile%s" % (p.name, ", riprovo" if attempt < 1 else ""))
+                if attempt >= 1:
+                    break
         return []
 
     def __call__(self, clusters):
@@ -1095,7 +1177,7 @@ def process(items, cfg, state, now, rater, notifier):
             stats["unrated"] += 1
             for it in c.items:
                 n = state["attempts"].get(it.id, 0) + 1
-                if n >= 3:
+                if n >= MAX_RATING_ATTEMPTS:
                     seen[it.id] = iso(now)
                     state["attempts"].pop(it.id, None)
                 else:
@@ -1324,6 +1406,9 @@ def main(argv=None):
         state["last_run"] = iso(now)
         line = run_summary(stats, notifier.channels(), now)
         log(line)
+        if stats["unrated"] and not stats["rated"]:
+            log("ATTENZIONE: nessuna notizia è stata valutata. Guarda le righe [gemini]/[groq] qui sopra: "
+                "di solito è un sovraccarico temporaneo e le notizie vengono riprovate al giro dopo.")
         step_summary("**" + line + "**")
         bad = [n for n, h in state["source_health"].items() if h.get("fails", 0) >= 3]
         if bad:
