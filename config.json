@@ -1,0 +1,104 @@
+{
+  "_come_si_modifica": "Modifica solo i valori. Attenzione a virgole e virgolette: se sbagli, il Radar te lo dice con il numero di riga. Per spegnere una fonte metti \"enabled\": false.",
+
+  "timezone": "Europe/Rome",
+
+  "thresholds": {
+    "_notify": "Punteggio minimo (0-10) per ricevere subito una notifica. Più alto = meno notifiche.",
+    "notify": 7.0,
+    "_digest_min": "Sotto la soglia ma sopra questo valore: finisce nel riepilogo serale.",
+    "digest_min": 5.0,
+    "_force": "Se l'impatto è almeno questo e la fonte è ufficiale/trade, notifica comunque (es. morti, cancellazioni, annunci enormi).",
+    "force_notify_impact": 9
+  },
+
+  "max_notifications_per_run": 5,
+  "max_age_hours": 8,
+  "first_run_max_age_hours": 3,
+
+  "digest": { "enabled": true, "hour": 20, "max_items": 15 },
+
+  "quiet_hours": {
+    "_nota": "Di notte le notifiche arrivano senza suono, tranne quelle con punteggio >= override_score.",
+    "enabled": true,
+    "start": "00:30",
+    "end": "07:30",
+    "override_score": 9.0
+  },
+
+  "weights": {
+    "_nota": "Quanto pesa ogni voce nel punteggio base.",
+    "impact": 0.45,
+    "audience_fit": 0.35,
+    "traffic": 0.20
+  },
+
+  "reliability_factor": {
+    "ufficiale": 1.0,
+    "trade": 0.95,
+    "stampa": 0.85,
+    "rumor": 0.75,
+    "opinione": 0.4
+  },
+
+  "freshness_steps": [[60, 1.0], [180, 0.95], [360, 0.85], [720, 0.7], [100000, 0.5]],
+  "saturation_steps": [[1, 1.0], [2, 0.95], [4, 0.85], [7, 0.7], [999, 0.55]],
+  "italian_coverage_steps": [[0, 1.0], [1, 0.85], [999, 0.65]],
+
+  "exclude_title_patterns": [
+    "\\b(black friday|cyber monday|prime day|promo code|coupon|gift guide|buying guide|where to buy|on sale now)\\b|\\bbest\\b.{0,40}\\bdeals?\\b|\\bdeals? (on|for|alert)\\b|\\d+% off",
+    "\\b(codice sconto|codici sconto|migliori offerte|offerte (del giorno|lampo|su)|in offerta|sconti (su|del|fino)|dove comprare|dove acquistare|black friday)\\b",
+    "\\b(wordle|quordle|nyt connections|nyt strands|horoscope|oroscopo|crossword)\\b",
+    "\\b(how to watch|where to watch|dove vedere|come vedere)\\b",
+    "\\b(walkthrough|how to (beat|get|unlock|find|solve))\\b",
+    "\\b(review|recensione)\\b"
+  ],
+
+  "sources": [
+    { "name": "Anime News Network", "url": "https://www.animenewsnetwork.com/all/rss.xml?ann-edition=w", "lang": "en", "tier": "trade", "category": "anime" },
+    { "name": "Crunchyroll News", "url": "https://cr-news-api-service.prd.crunchyrollsvc.com/v1/en-US/rss", "lang": "en", "tier": "official", "category": "anime" },
+    { "name": "Anime Corner", "url": "https://animecorner.me/feed/", "lang": "en", "tier": "blog", "category": "anime" },
+
+    { "name": "CBR", "url": "https://www.cbr.com/feed/", "lang": "en", "tier": "major", "category": "fumetti" },
+    { "name": "ComicBook.com", "url": "https://comicbook.com/feed/", "lang": "en", "tier": "major", "category": "fumetti" },
+    { "name": "Bleeding Cool", "url": "https://bleedingcool.com/feed/", "lang": "en", "tier": "blog", "category": "fumetti" },
+
+    { "name": "Deadline", "url": "https://deadline.com/feed/", "lang": "en", "tier": "trade", "category": "film" },
+    { "name": "Variety", "url": "https://variety.com/feed/", "lang": "en", "tier": "trade", "category": "film" },
+    { "name": "The Hollywood Reporter", "url": "https://www.hollywoodreporter.com/feed/", "lang": "en", "tier": "trade", "category": "film" },
+    { "name": "Collider", "url": "https://collider.com/feed/", "lang": "en", "tier": "major", "category": "film" },
+    { "name": "Screen Rant", "url": "https://screenrant.com/feed/", "lang": "en", "tier": "major", "category": "film" },
+    { "name": "SlashFilm", "url": "https://www.slashfilm.com/feed/", "lang": "en", "tier": "major", "category": "film" },
+    { "name": "TVLine", "url": "https://tvline.com/feed/", "lang": "en", "tier": "major", "category": "serie_tv" },
+
+    { "name": "Polygon", "url": "https://www.polygon.com/rss/index.xml", "lang": "en", "tier": "major", "category": "videogiochi" },
+    { "name": "GamesRadar+", "url": "https://www.gamesradar.com/rss/", "lang": "en", "tier": "major", "category": "videogiochi" },
+    { "name": "PC Gamer", "url": "https://www.pcgamer.com/rss/", "lang": "en", "tier": "major", "category": "videogiochi" },
+    { "name": "VGC", "url": "https://www.videogameschronicle.com/feed/", "lang": "en", "tier": "major", "category": "videogiochi" },
+    { "name": "Eurogamer", "url": "https://www.eurogamer.net/feed", "lang": "en", "tier": "major", "category": "videogiochi" },
+    { "name": "Kotaku", "url": "https://kotaku.com/rss", "lang": "en", "tier": "major", "category": "videogiochi" },
+
+    { "name": "Fumettologica", "url": "https://fumettologica.it/feed/", "lang": "it", "tier": "major", "category": "fumetti" },
+    { "name": "Lo Spazio Bianco", "url": "https://www.lospaziobianco.it/feed/", "lang": "it", "tier": "blog", "category": "fumetti" },
+    { "name": "BadTaste.it", "url": "https://www.badtaste.it/feed/", "lang": "it", "tier": "major", "category": "film" },
+    { "name": "Cinematographe", "url": "https://www.cinematographe.it/feed/", "lang": "it", "tier": "blog", "category": "film" },
+    { "name": "Nerdpool", "url": "https://www.nerdpool.it/feed/", "lang": "it", "tier": "blog", "category": "altro" },
+
+    {
+      "name": "LA NOSTRA TESTATA",
+      "url": "https://IL-TUO-SITO.it/feed/",
+      "lang": "it", "tier": "official", "category": "altro",
+      "own": true, "enabled": false,
+      "note": "Metti qui il feed del vostro sito e porta enabled a true: il Radar non vi notificherà notizie che avete già pubblicato."
+    },
+
+    { "name": "Everyeye.it", "url": "https://www.everyeye.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi", "enabled": false, "note": "URL da verificare con --check-sources --all" },
+    { "name": "Multiplayer.it", "url": "https://multiplayer.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi", "enabled": false, "note": "URL da verificare con --check-sources --all" },
+    { "name": "Movieplayer.it", "url": "https://movieplayer.it/rss/", "lang": "it", "tier": "major", "category": "film", "enabled": false, "note": "URL da verificare con --check-sources --all" },
+    { "name": "AnimeClick", "url": "https://www.animeclick.it/rss/news", "lang": "it", "tier": "blog", "category": "anime", "enabled": false, "note": "URL da verificare con --check-sources --all" },
+
+    { "name": "Reddit r/anime", "url": "https://www.reddit.com/r/anime/hot/.rss", "lang": "en", "tier": "community", "category": "anime", "enabled": false, "note": "Reddit spesso blocca i server di GitHub: prova con --check-sources --all" },
+    { "name": "Reddit r/movies", "url": "https://www.reddit.com/r/movies/hot/.rss", "lang": "en", "tier": "community", "category": "film", "enabled": false },
+    { "name": "Reddit r/comicbooks", "url": "https://www.reddit.com/r/comicbooks/hot/.rss", "lang": "en", "tier": "community", "category": "fumetti", "enabled": false }
+  ]
+}
