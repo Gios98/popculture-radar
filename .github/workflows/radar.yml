@@ -20,6 +20,7 @@ on:
           - dry-run
           - check-sources
           - check-llm
+          - check-wordpress
           - test-notify
           - chat-id
           - digest-now
@@ -45,6 +46,11 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+      WP_USER: ${{ secrets.WP_USER }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      WP_PAGE_PASSWORD: ${{ secrets.WP_PAGE_PASSWORD }}
+      WP_PAGE_SLUG: ${{ secrets.WP_PAGE_SLUG }}
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +82,7 @@ jobs:
             dry-run)        python3 radar.py --dry-run ;;
             check-sources)  python3 radar.py --check-sources --all ;;
             check-llm)      python3 radar.py --check-llm ;;
+            check-wordpress) python3 radar.py --check-wordpress ;;
             test-notify)    python3 radar.py --test-notify ;;
             chat-id)        python3 radar.py --telegram-chat-id ;;
             digest-now)     python3 radar.py --digest-now ;;
