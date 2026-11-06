@@ -442,10 +442,13 @@ def parse_feed(raw: bytes, src: dict, now: dt.datetime, max_items: int = 30):
     items = []
     for e in entries[:max_items]:
         title = clean_text(_child_text(e, "title"), 300)
+        summary = clean_text(_child_text(e, "description", "summary", "encoded", "content"), 500)
+        if not title and summary:  # es. i post di Bluesky: nessun titolo, solo il testo del post
+            cut = re.split(r"(?<=[.!?])\s", summary, maxsplit=1)[0]
+            title = (cut if 25 <= len(cut) <= 200 else summary[:200].rsplit(" ", 1)[0] if len(summary) > 200 else summary).strip()
         link = _entry_link(e)
         if not title or not link.lower().startswith(("http://", "https://")):
             continue
-        summary = clean_text(_child_text(e, "description", "summary", "encoded", "content"), 500)
         pub = parse_date(_child_text(e, "pubDate", "published", "updated", "date")) or now
         if pub > now + dt.timedelta(hours=1):
             pub = now
@@ -1412,16 +1415,17 @@ def print_report(state, cfg):
     rep = state.get("_report") or {}
     if not rep:
         return
-    rows = sorted(rep.values(), key=lambda x: -x[0])[:30]
+    rows = sorted(rep.values(), key=lambda x: -x[0])[:45]
     thr = float(((state.get("control") or {}).get("threshold")) or cfg["thresholds"]["notify"])
     lines = ["### Come sono state giudicate le notizie (soglia avviso: %g)" % thr, "",
              "| Punti | Esito | Titolo | Letto | Impatto / Pubblico / Traffico |", "|---|---|---|---|---|"]
     for score, r, outcome in rows:
         deep = {True: "📖 sì", False: "solo anteprima"}.get(r.get("deep"), "—")
         title = (r.get("headline_it") or "?").replace("|", "/")
-        lines.append("| %.1f | %s | %s | %s | %.0f / %.0f / %.0f |" % (score, outcome, title[:90], deep, r["impact"], r["audience_fit"], r["traffic"]))
+        marks = "—" if r.get("na") else "%.0f / %.0f / %.0f" % (r["impact"], r["audience_fit"], r["traffic"])
+        lines.append("| %.1f | %s | %s | %s | %s |" % (score, outcome.replace("|", "/"), title[:90], deep, marks))
         log("  %4.1f  %-30s %s" % (score, outcome, title[:80]))
-    step_summary("\n".join(lines))
+    step_summary("\n".join(lines) + "\n")
 
 
 def deep_read(to_rate, ratings, rater, cfg, now, stats):
@@ -1470,14 +1474,19 @@ def process(items, cfg, state, now, rater, notifier):
     max_age = dt.timedelta(hours=cfg["first_run_max_age_hours"] if state.get("_new") else cfg["max_age_hours"])
     excl = [re.compile(p, re.I) for p in cfg["exclude_title_patterns"]]
 
+    report = state["_report"] = {}
     fresh = []
     for it in items:
         if it.id in seen:
             continue
         limit = dt.timedelta(hours=cfg["story_ttl_hours"]) if it.own else max_age  # i nostri articoli restano "visti" più a lungo
-        if now - it.published > limit or any(rx.search(it.title) for rx in excl):
+        too_old = now - it.published > limit
+        hit = any(rx.search(it.title) for rx in excl)
+        if too_old or hit:
             seen[it.id] = iso(now)
             stats["skipped"] += 1
+            if hit and not too_old:
+                report["x:" + it.id] = (0.0, {"headline_it": it.title, "na": True}, "scartata dal filtro parole (offerte, guide, recensioni...)")
             continue
         fresh.append(it)
     stats["fresh"] = len(fresh)
@@ -1489,6 +1498,9 @@ def process(items, cfg, state, now, rater, notifier):
             add_source(st, it)
             seen[it.id] = iso(now)
             stats["matched"] += 1
+            prev = (st.get("rating") or {}).get("headline_it") or st["title"]
+            report["m:" + it.id] = (st.get("score", 0.0), {"headline_it": it.title, "na": True},
+                                    "già vista come: " + prev[:60])
         else:
             new_items.append(it)
 
@@ -1514,7 +1526,6 @@ def process(items, cfg, state, now, rater, notifier):
     notify_thr = float(ctl.get("threshold") or thr["notify"])
     muted = is_muted(state, now)
     alerts = []
-    report = state["_report"] = {}
     for c in to_rate:
         r = ratings.get(c.cid)
         if r is None:
@@ -1590,7 +1601,7 @@ def maybe_send_digest(cfg, state, now, notifier, force=False):
 
 
 # --------------------------------------------------------------------------- comandi da Telegram
-MENU_VERSION = 1
+MENU_VERSION = 2
 MENU = [
     ("stato", "Come sta andando il Radar"),
     ("pausa", "Ferma le notifiche"),
@@ -1599,6 +1610,7 @@ MENU = [
     ("silenzio", "Notifiche senza suono, es. /silenzio 2h"),
     ("riepilogo", "Mandami subito il riepilogo"),
     ("fonti", "Elenco delle fonti"),
+    ("perche", "Perché non ho ricevuto una notizia, es. /perche stranger things"),
     ("aiuto", "Lista dei comandi"),
 ]
 HELP_TEXT = (
@@ -1609,7 +1621,8 @@ HELP_TEXT = (
     "/soglia 8 - ricevi solo notizie da 8 in su (/soglia reset per tornare al valore normale)\n"
     "/silenzio 2h - notifiche senza suono per 2 ore (/silenzio off per annullare)\n"
     "/riepilogo - ti mando subito il riepilogo\n"
-    "/fonti - elenco delle fonti e di quelle con problemi"
+    "/fonti - elenco delle fonti e di quelle con problemi\n"
+    "/perche stranger things - cerco quella notizia nelle fonti e ti dico che fine ha fatto e con che punteggio"
 )
 
 
@@ -1643,7 +1656,7 @@ def handle_command(text, cfg, state, now):
     """Esegue un comando. Ritorna (risposta, azione) dove azione può essere 'digest'."""
     ctl = state.setdefault("control", {})
     parts = text.strip().split()
-    cmd = parts[0].lstrip("/").split("@")[0].lower() if parts else ""
+    cmd = norm_text(parts[0].lstrip("/").split("@")[0]) if parts else ""
     arg = " ".join(parts[1:]).strip()
     if cmd in ("aiuto", "help", "start", "comandi"):
         return HELP_TEXT, None
@@ -1693,6 +1706,10 @@ def handle_command(text, cfg, state, now):
         return "Notifiche senza suono fino alle %s." % _local_hm(ctl["mute_until"], cfg), None
     if cmd in ("riepilogo", "digest"):
         return "Preparo il riepilogo…", "digest"
+    if cmd in ("perche", "why", "cerca"):
+        if len(arg) < 3:
+            return "Scrivimi cosa cercare, per esempio /perche stranger things", None
+        return "Cerco «%s» nelle fonti, ti rispondo al prossimo giro." % arg[:60], "why:" + arg[:60]
     if cmd == "fonti":
         health = state.get("source_health", {})
         rows = []
@@ -1703,6 +1720,68 @@ def handle_command(text, cfg, state, now):
             rows.append(("⚠️ " if f >= 3 else "• ") + src["name"] + (" (errori: %d)" % f if f >= 3 else ""))
         return "Fonti attive (%d):\n%s" % (len(rows), "\n".join(rows)), None
     return "Non conosco questo comando. Scrivi /aiuto per la lista.", None
+
+
+def _story_fate(st, cfg, state):
+    if st.get("own"):
+        return "è un vostro articolo (già pubblicato)"
+    r = st.get("rating") or {}
+    if st.get("ignored") or r.get("ignore"):
+        return "scartata come non pertinente"
+    d = st.get("score_detail") or {}
+    thr = float(((state.get("control") or {}).get("threshold")) or cfg["thresholds"]["notify"])
+    if st.get("notified"):
+        res = "AVVISO inviato"
+    elif st["score"] >= float(cfg["thresholds"]["digest_min"]):
+        res = "nel riepilogo serale" if st["score"] < thr else "avviso non inviato (troppi avvisi insieme)"
+    else:
+        res = "sotto soglia, non inviata"
+    out = "%.1f punti (soglia %g): %s" % (st["score"], thr, res)
+    if d:
+        out += " [base %.1f × affidabilità %.2f × freschezza %.2f × saturazione %.2f × copertura IT %.2f; %d font%s]" % (
+            d.get("base", 0), d.get("rel", 1), d.get("fresh", 1), d.get("sat", 1), d.get("ita", 1),
+            d.get("n_sources", 1), "e" if d.get("n_sources", 1) == 1 else "i")
+    return out
+
+
+def explain_keyword(kw, items, cfg, state, now):
+    """Risponde a /perche: cerca la parola nei feed e dice che fine ha fatto ogni notizia."""
+    kn = norm_text(kw.strip())
+    excl = [re.compile(p, re.I) for p in cfg["exclude_title_patterns"]]
+    max_age = dt.timedelta(hours=cfg["max_age_hours"])
+    by_link = {}
+    for st in state.get("stories", []):
+        for src in st.get("sources", []):
+            by_link[src.get("link")] = st
+    hits = sorted((i for i in items if kn in norm_text(i.title + " " + i.summary)), key=lambda i: i.published, reverse=True)
+    lines, shown = [], set()
+    for it in hits[:8]:
+        st = by_link.get(it.link)
+        if st:
+            shown.add(st["id"])
+            fate = _story_fate(st, cfg, state)
+            head = (st.get("rating") or {}).get("headline_it")
+            if head:
+                fate = "«%s» → %s" % (head[:80], fate)
+        elif any(rx.search(it.title) for rx in excl):
+            fate = "scartata dal filtro parole (offerte, guide, recensioni...)"
+        elif now - it.published > max_age:
+            fate = "troppo vecchia (oltre %d ore)" % cfg["max_age_hours"]
+        elif it.own:
+            fate = "è un vostro articolo"
+        else:
+            fate = "vista ma non valutata (valutazione fallita o rinviata: ci riprova)"
+        lines.append("%d. [%s] %s (%s)\n   → %s" % (len(lines) + 1, it.source, it.title[:90], fmt_age(int((now - it.published).total_seconds() // 60)), fate))
+    for st in state.get("stories", []):
+        if len(lines) >= 8:
+            break
+        txt = norm_text(st.get("title", "") + " " + ((st.get("rating") or {}).get("headline_it") or ""))
+        if st["id"] not in shown and kn in txt:
+            lines.append("%d. [memoria] %s\n   → %s" % (len(lines) + 1, st["title"][:90], _story_fate(st, cfg, state)))
+    if not lines:
+        return ("🔎 «%s»: non compare in nessuna delle fonti controllate (ultimi articoli di ogni feed) né nella memoria del Radar. "
+                "Probabilmente la fonte dove l'hai vista non è tra quelle monitorate, oppure non l'ha ancora pubblicata nel feed." % kw)
+    return "🔎 «%s»: %d risultat%s\n\n%s" % (kw, len(lines), "o" if len(lines) == 1 else "i", "\n".join(lines))
 
 
 def poll_commands(cfg, state, notifier, now):
@@ -1975,6 +2054,8 @@ def main(argv=None):
         items = collect(cfg, state, now)
         stats = process(items, cfg, state, now, rater, notifier)
         print_report(state, cfg)
+        for a in sorted(x for x in actions if x.startswith("why:")):
+            notifier.send(simple_message(explain_keyword(a[4:], items, cfg, state, now), silent=False))
         sent = maybe_send_digest(cfg, state, now, notifier, force="digest" in actions)
         if "digest" in actions and not sent:
             notifier.send(simple_message("Il riepilogo è vuoto: non c'è niente in coda.", silent=True))
