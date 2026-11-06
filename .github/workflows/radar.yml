@@ -29,8 +29,10 @@ permissions:
   contents: write
   actions: write
 
+# I giri normali (e il riepilogo) fanno la fila uno alla volta. Le prove manuali (check-sources, check-llm,
+# check-wordpress, ...) hanno un gruppo tutto loro, così non vengono annullate dalla catena dei giri.
 concurrency:
-  group: popculture-radar
+  group: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now' || github.event.inputs.mode == '') && 'popculture-radar' || format('popculture-radar-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
