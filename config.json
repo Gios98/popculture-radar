@@ -85,11 +85,11 @@
     { "name": "Nerdpool", "url": "https://www.nerdpool.it/feed/", "lang": "it", "tier": "blog", "category": "altro" },
 
     {
-      "name": "LA NOSTRA TESTATA",
-      "url": "https://IL-TUO-SITO.it/feed/",
+      "name": "PopVault (la nostra testata)",
+      "url": "https://popvault.it/feed/",
       "lang": "it", "tier": "official", "category": "altro",
-      "own": true, "enabled": false,
-      "note": "Metti qui il feed del vostro sito e porta enabled a true: il Radar non vi notificherà notizie che avete già pubblicato."
+      "own": true,
+      "note": "Il Radar non vi notificherà notizie che avete già pubblicato. Se l'indirizzo del feed non funziona, controlla con check-sources e correggilo qui."
     },
 
     { "name": "Everyeye.it", "url": "https://www.everyeye.it/feed/", "lang": "it", "tier": "major", "category": "videogiochi" },
