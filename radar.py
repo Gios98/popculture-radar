@@ -84,6 +84,8 @@ DEFAULT_CONFIG = {
     "max_notifications_per_run": 5,
     "health_warn_after_failures": 12,
     "thresholds": {"notify": 7.0, "digest_min": 5.0, "force_notify_impact": 9},
+    "wordpress": {"enabled": True, "title": "Rassegna Radar", "slug": "rassegna-radar", "window_hours": 72,
+                  "max_stories": 400, "heartbeat_minutes": 30},
     "deep_read": {"enabled": True, "min_score": 5.0, "max_per_run": 8, "max_chars": 3000,
                   "batch_size": 2, "fetch_timeout": 15, "budget_seconds": 150},
     "digest": {"enabled": True, "hour": 20, "max_items": 15},
@@ -1818,6 +1820,317 @@ def poll_commands(cfg, state, notifier, now):
     return actions
 
 
+# --------------------------------------------------------------------------- rassegna stampa su WordPress
+PRESS_HTML = r"""<div id="radar-rassegna" data-nosnippet>
+<style>
+#radar-rassegna{--bg:#f6f7f9;--card:#fff;--ink:#14171f;--mute:#5b6472;--line:#dfe3ea;--acc:#2f5bea;--hot:#d6361f;--warm:#e08a00;--cool:#7b8494;--chip:#e9edf5;--chipon:#14171f;--chipinkon:#fff;
+font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg);padding:16px;border-radius:12px;max-width:980px;margin:0 auto;box-sizing:border-box}
+@media (prefers-color-scheme:dark){#radar-rassegna{--bg:#0f1218;--card:#181c25;--ink:#e8ebf2;--mute:#9aa3b2;--line:#2a303c;--acc:#7da0ff;--chip:#232938;--chipon:#e8ebf2;--chipinkon:#0f1218}}
+#radar-rassegna *{box-sizing:border-box}
+#radar-rassegna h2.rr-t{margin:0 0 2px;font-size:22px;line-height:1.2;color:var(--ink);border:0;padding:0}
+#radar-rassegna .rr-sub{color:var(--mute);font-size:13px;margin-bottom:12px}
+#radar-rassegna .rr-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center}
+#radar-rassegna input[type=search],#radar-rassegna select{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);min-height:38px}
+#radar-rassegna input[type=search]{flex:1 1 200px;min-width:0}
+#radar-rassegna .rr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+#radar-rassegna .rr-chip{font:inherit;font-size:13px;padding:6px 11px;border-radius:999px;border:0;background:var(--chip);color:var(--ink);cursor:pointer;min-height:34px}
+#radar-rassegna .rr-chip[aria-pressed=true]{background:var(--chipon);color:var(--chipinkon)}
+#radar-rassegna .rr-n{color:var(--mute);font-size:13px;margin:6px 0 10px}
+#radar-rassegna .rr-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:grid;grid-template-columns:54px 1fr;gap:12px}
+#radar-rassegna .rr-sc{align-self:start;text-align:center;font-weight:700;font-size:18px;border-radius:10px;padding:6px 0;color:#fff;background:var(--cool)}
+#radar-rassegna .rr-sc small{display:block;font-weight:500;font-size:10px;opacity:.9}
+#radar-rassegna .rr-sc.hot{background:var(--hot)}#radar-rassegna .rr-sc.warm{background:var(--warm)}
+#radar-rassegna .rr-meta{font-size:12px;color:var(--mute);display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:3px}
+#radar-rassegna .rr-h{font-weight:650;font-size:17px;line-height:1.3;margin:0 0 4px}
+#radar-rassegna .rr-h a{color:var(--ink);text-decoration:none}#radar-rassegna .rr-h a:hover{text-decoration:underline}
+#radar-rassegna .rr-s{margin:0 0 6px}
+#radar-rassegna .rr-x{font-size:14px;color:var(--mute);margin:0 0 3px}
+#radar-rassegna .rr-src{font-size:13px;margin-top:6px}
+#radar-rassegna .rr-src a{color:var(--acc);margin-right:10px;text-decoration:none}
+#radar-rassegna details{margin-top:6px;font-size:13px;color:var(--mute)}
+#radar-rassegna summary{cursor:pointer}
+#radar-rassegna .rr-tag{display:inline-block;padding:1px 7px;border-radius:6px;background:var(--chip);font-size:11px;color:var(--ink)}
+#radar-rassegna .rr-empty{padding:30px;text-align:center;color:var(--mute)}
+@media (max-width:520px){#radar-rassegna{padding:12px;border-radius:0}#radar-rassegna .rr-card{grid-template-columns:44px 1fr;padding:10px}#radar-rassegna .rr-sc{font-size:16px}}
+</style>
+<h2 class="rr-t">__TITLE__</h2>
+<div class="rr-sub" id="rr-sub"></div>
+<div class="rr-bar">
+<input type="search" id="rr-q" placeholder="Cerca (titolo, franchise, fonte)" aria-label="Cerca">
+<select id="rr-win" aria-label="Periodo"><option value="3">Ultime 3 ore</option><option value="6">Ultime 6 ore</option><option value="12">Ultime 12 ore</option><option value="24">Ultime 24 ore</option><option value="72">Ultime 72 ore</option></select>
+<select id="rr-sort" aria-label="Ordine"><option value="score">Per punteggio</option><option value="time">Più recenti</option></select>
+<select id="rr-min" aria-label="Punteggio minimo"><option value="0">Ogni punteggio</option><option value="3">Da 3</option><option value="5">Da 5</option><option value="6.5">Da 6,5</option><option value="7">Da 7</option></select>
+</div>
+<div class="rr-chips" id="rr-cats"></div>
+<div class="rr-chips" id="rr-sts"></div>
+<div class="rr-n" id="rr-n"></div>
+<div id="rr-list"></div>
+<script type="application/json" id="radar-data" data-cfasync="false" data-no-optimize="1" data-no-defer="1">__DATA__</script>
+<script data-cfasync="false" data-no-optimize="1" data-no-defer="1">
+(function(){
+var D;try{D=JSON.parse(document.getElementById('radar-data').textContent);}catch(e){D={meta:{},rows:[]};}
+var CATS=[['all','Tutte'],['film','🎬 Film'],['serie_tv','📺 Serie TV'],['videogiochi','🎮 Giochi'],['fumetti','🦸 Fumetti'],['manga','📚 Manga'],['anime','🎌 Anime'],['altro','📰 Altro']];
+var STS=[['alert','🔥 Avvisi'],['digest','🗞 Riepilogo'],['low','Sotto soglia'],['ignored','Scartate'],['own','Nostre']];
+var CATL={film:'Film',serie_tv:'Serie TV',videogiochi:'Videogiochi',fumetti:'Fumetti',manga:'Manga',anime:'Anime',altro:'Altro'};
+var STL={alert:'Avviso',digest:'Riepilogo serale',low:'Sotto soglia',ignored:'Scartata',own:'Già pubblicata da noi'};
+var REL={ufficiale:'Ufficiale',trade:'Trade',stampa:'Stampa',rumor:'Rumor',opinione:'Opinione'};
+var S={q:'',cat:'all',win:'24',sort:'score',min:'0',sts:{alert:1,digest:1,low:1,ignored:0,own:0}};
+try{var sv=JSON.parse(localStorage.getItem('radar-prefs')||'{}');for(var k in sv){S[k]=sv[k];}}catch(e){}
+function $(i){return document.getElementById(i);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function url(u){return /^https?:\/\//i.test(u||'')?u:'#';}
+function save(){try{localStorage.setItem('radar-prefs',JSON.stringify(S));}catch(e){}}
+function ago(iso){var m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));if(isNaN(m))return '';if(m<2)return 'adesso';if(m<60)return m+' min fa';var h=Math.floor(m/60);if(h<24)return h+' h fa';return Math.floor(h/24)+' g fa';}
+function hm(iso){try{return new Date(iso).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Rome'});}catch(e){return '';}}
+function chips(){
+ $('rr-cats').innerHTML=CATS.map(function(c){return '<button class="rr-chip" data-cat="'+c[0]+'" aria-pressed="'+(S.cat===c[0])+'">'+c[1]+'</button>';}).join('');
+ $('rr-sts').innerHTML=STS.map(function(c){return '<button class="rr-chip" data-st="'+c[0]+'" aria-pressed="'+(!!S.sts[c[0]])+'">'+c[1]+'</button>';}).join('');
+}
+function head(){
+ var m=D.meta||{},bits=[];
+ if(m.gen)bits.push('Aggiornata alle '+hm(m.gen));
+ if(m.last_run)bits.push('ultimo giro del Radar alle '+hm(m.last_run));
+ if(m.thr!=null)bits.push('soglia avviso '+String(m.thr).replace('.',','));
+ if(m.paused)bits.push('⏸ IN PAUSA');
+ $('rr-sub').textContent=bits.join(' · ');
+}
+function render(){
+ head();
+ var now=Date.now(),q=S.q.trim().toLowerCase(),win=parseFloat(S.win)*3600000,min=parseFloat(S.min)||0;
+ var rows=(D.rows||[]).filter(function(r){
+  if(!S.sts[r.st])return false;
+  if(S.cat!=='all'&&r.cat!==S.cat)return false;
+  if(r.sc<min)return false;
+  if(now-Date.parse(r.p)>win)return false;
+  if(q){var hay=((r.h||'')+' '+(r.ot||'')+' '+(r.s||'')+' '+(r.f||'')+' '+(r.src||[]).map(function(s){return s.n;}).join(' ')).toLowerCase();if(hay.indexOf(q)<0)return false;}
+  return true;});
+ rows.sort(function(a,b){return S.sort==='time'?Date.parse(b.p)-Date.parse(a.p):(b.sc-a.sc)||(Date.parse(b.p)-Date.parse(a.p));});
+ $('rr-n').textContent=rows.length+(rows.length===1?' notizia':' notizie');
+ if(!rows.length){$('rr-list').innerHTML='<div class="rr-empty">Nessuna notizia con questi filtri.</div>';return;}
+ $('rr-list').innerHTML=rows.slice(0,150).map(function(r){
+  var cls=r.sc>=7?'hot':(r.sc>=5?'warm':'');
+  var first=(r.src&&r.src[0])?url(r.src[0].u):'#';
+  var meta='<span>'+esc(CATL[r.cat]||'Altro')+'</span><span class="rr-tag">'+esc(STL[r.st]||'')+'</span>';
+  if(r.rel)meta+='<span>'+esc(REL[r.rel]||r.rel)+'</span>';
+  meta+='<span>'+esc(ago(r.p))+'</span>';
+  if(r.dp===true)meta+='<span>📖 articolo letto</span>';else if(r.dp===false)meta+='<span>⚠️ solo anteprima</span>';
+  var det='';
+  if(r.d){det='<details><summary>Dettagli del punteggio</summary><div>Titolo originale: '+esc(r.ot)+'<br>Impatto '+r.im+' · Pubblico '+r.au+' · Traffico '+r.tr+'<br>base '+r.d.b+' × affidabilità '+r.d.r+' × freschezza '+r.d.f+' × saturazione '+r.d.s+' × copertura IT '+r.d.i+'</div></details>';}
+  else if(r.ot){det='<details><summary>Titolo originale</summary><div>'+esc(r.ot)+'</div></details>';}
+  return '<div class="rr-card"><div class="rr-sc '+cls+'">'+String(r.sc.toFixed(1)).replace('.',',')+'<small>/10</small></div><div>'
+   +'<div class="rr-meta">'+meta+'</div>'
+   +'<p class="rr-h"><a href="'+esc(first)+'" target="_blank" rel="noopener noreferrer">'+esc(r.h)+'</a></p>'
+   +(r.s?'<p class="rr-s">'+esc(r.s)+'</p>':'')
+   +(r.w?'<p class="rr-x">💡 '+esc(r.w)+'</p>':'')
+   +(r.a?'<p class="rr-x">✍️ '+esc(r.a)+'</p>':'')
+   +'<div class="rr-src">'+(r.src||[]).slice(0,6).map(function(s){return '<a href="'+esc(url(s.u))+'" target="_blank" rel="noopener noreferrer">'+esc(s.n)+'</a>';}).join('')+'</div>'
+   +det+'</div></div>';
+ }).join('');
+}
+$('rr-q').value=S.q;$('rr-win').value=S.win;$('rr-sort').value=S.sort;$('rr-min').value=S.min;
+$('rr-q').addEventListener('input',function(){S.q=this.value;save();render();});
+$('rr-win').addEventListener('change',function(){S.win=this.value;save();render();});
+$('rr-sort').addEventListener('change',function(){S.sort=this.value;save();render();});
+$('rr-min').addEventListener('change',function(){S.min=this.value;save();render();});
+$('radar-rassegna').addEventListener('click',function(e){
+ var b=e.target.closest?e.target.closest('button.rr-chip'):null;if(!b)return;
+ if(b.getAttribute('data-cat')){S.cat=b.getAttribute('data-cat');}
+ else if(b.getAttribute('data-st')){var k=b.getAttribute('data-st');S.sts[k]=S.sts[k]?0:1;}
+ save();chips();render();});
+chips();render();
+setInterval(render,60000);
+setInterval(function(){
+ try{fetch(location.pathname+'?r='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(r){return r.text();}).then(function(t){
+  var m=t.match(/<script type="application\/json" id="radar-data"[^>]*>([\s\S]*?)<\/script>/);if(!m)return;
+  var nd=JSON.parse(m[1]);if(nd&&nd.meta&&nd.meta.gen!==(D.meta||{}).gen){D=nd;render();}}).catch(function(){});}catch(e){}
+},90000);
+})();
+</script>
+</div>"""
+
+
+def story_status(st, cfg, state):
+    if st.get("own"):
+        return "own"
+    r = st.get("rating") or {}
+    if st.get("ignored") or r.get("ignore"):
+        return "ignored"
+    thr = float(((state.get("control") or {}).get("threshold")) or cfg["thresholds"]["notify"])
+    if st.get("notified") or st.get("score", 0) >= thr:
+        return "alert"
+    if st.get("score", 0) >= float(cfg["thresholds"]["digest_min"]):
+        return "digest"
+    return "low"
+
+
+def press_rows(state, cfg, now):
+    wcfg = cfg["wordpress"]
+    cutoff = now - dt.timedelta(hours=float(wcfg["window_hours"]))
+    rows = []
+    for st in state.get("stories", []):
+        try:
+            if parse_iso(st["pub"]) < cutoff:
+                continue
+        except (KeyError, ValueError):
+            continue
+        r = st.get("rating") or {}
+        d = st.get("score_detail") or {}
+        row = {
+            "id": st["id"], "p": st["pub"], "sc": round(float(st.get("score", 0)), 1), "st": story_status(st, cfg, state),
+            "cat": st.get("category", "altro"), "h": r.get("headline_it") or st["title"], "ot": st["title"],
+            "s": r.get("summary_it", ""), "w": r.get("why", ""), "a": r.get("angle", ""), "f": r.get("franchise", ""),
+            "rel": r.get("reliability", ""), "im": round(float(r.get("impact", 0))), "au": round(float(r.get("audience_fit", 0))),
+            "tr": round(float(r.get("traffic", 0))), "dp": r.get("deep"),
+            "src": [{"n": s.get("name", ""), "u": s.get("link", "")} for s in st.get("sources", [])
+                    if str(s.get("link", "")).lower().startswith(("http://", "https://"))][:6],
+        }
+        if d:
+            row["d"] = {"b": round(d.get("base", 0), 1), "r": round(d.get("rel", 1), 2), "f": round(d.get("fresh", 1), 2),
+                        "s": round(d.get("sat", 1), 2), "i": round(d.get("ita", 1), 2)}
+        rows.append(row)
+    rows.sort(key=lambda x: x["p"], reverse=True)
+    return rows[: int(wcfg["max_stories"])]
+
+
+def build_press_html(state, cfg, now):
+    """Costruisce la pagina della rassegna. Ritorna (html, impronta dei dati)."""
+    rows = press_rows(state, cfg, now)
+    ctl = state.get("control") or {}
+    thr = float(ctl.get("threshold") or cfg["thresholds"]["notify"])
+    stable = json.dumps({"rows": rows, "thr": thr, "paused": bool(ctl.get("paused"))}, ensure_ascii=False, sort_keys=True)
+    digest = hashlib.sha1(stable.encode("utf-8")).hexdigest()
+    meta = {"gen": iso(now), "last_run": state.get("last_run") or iso(now), "thr": thr, "paused": bool(ctl.get("paused"))}
+    payload = json.dumps({"meta": meta, "rows": rows}, ensure_ascii=False, separators=(",", ":"))
+    payload = payload.replace("</", "<\\/").replace("<!--", "<\\!--").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    page = PRESS_HTML.replace("__TITLE__", html.escape(cfg["wordpress"]["title"])).replace("__DATA__", payload)
+    return page, digest
+
+
+class WPError(Exception):
+    pass
+
+
+def wp_settings():
+    base = (env("WP_SITE_URL") or "").strip().rstrip("/")
+    user, pw = env("WP_USER"), env("WP_APP_PASSWORD")
+    if not (base and user and pw):
+        return None
+    if not base.startswith("https://"):
+        raise WPError("WP_SITE_URL deve iniziare con https:// (le credenziali non si mandano su un indirizzo non protetto)")
+    return {"base": base, "user": user.strip(), "pw": pw.replace(" ", ""), "page_pw": (env("WP_PAGE_PASSWORD") or "").strip()}
+
+
+def _wp_call(w, method, path, payload=None):
+    import base64
+    headers = {"Authorization": "Basic " + base64.b64encode(("%s:%s" % (w["user"], w["pw"])).encode("utf-8")).decode("ascii"),
+               "Accept": "application/json"}
+    data = None
+    if payload is not None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    try:
+        raw = http(w["base"] + "/wp-json" + path, data=data, method=method, headers=headers, timeout=40, max_bytes=8_000_000)
+    except HttpError as e:
+        if e.status == 401:
+            raise WPError("accesso rifiutato (401): nome utente o password applicazione sbagliati, oppure l'hosting toglie l'intestazione di accesso")
+        if e.status == 403:
+            raise WPError("accesso negato (403): permessi dell'utente insufficienti o blocco del firewall del sito")
+        if e.status == 404:
+            raise WPError("non trovato (404)")
+        raise WPError(str(e))
+    try:
+        return json.loads(raw) if raw else {}
+    except ValueError:
+        raise WPError("risposta non valida dal sito (forse una pagina di blocco o di errore)")
+
+
+def _wp_find_page(w, slug):
+    res = _wp_call(w, "GET", "/wp/v2/pages?slug=%s&status=publish,private,draft,pending&context=edit" % urllib.parse.quote(slug))
+    return res[0] if isinstance(res, list) and res else None
+
+
+def _wp_cleanup_revisions(w, page_id):
+    try:
+        revs = _wp_call(w, "GET", "/wp/v2/pages/%s/revisions?per_page=50" % page_id)
+        for rev in (revs or [])[:30]:
+            _wp_call(w, "DELETE", "/wp/v2/pages/%s/revisions/%s?force=true" % (page_id, rev["id"]))
+    except (WPError, KeyError, TypeError):
+        pass  # best effort: se le revisioni sono già disattivate non c'è nulla da ripulire
+
+
+def publish_wordpress(state, cfg, now, force=False):
+    """Aggiorna la pagina della rassegna. Ritorna l'indirizzo della pagina, o None se non configurato / invariata."""
+    wp = cfg["wordpress"]
+    w = wp_settings()
+    if not (w and wp.get("enabled", True)):
+        return None
+    page, digest = build_press_html(state, cfg, now)
+    mem = state.setdefault("wp", {})
+    fresh_enough = mem.get("t") and (now - parse_iso(mem["t"])) < dt.timedelta(minutes=float(wp["heartbeat_minutes"]))
+    if not force and mem.get("hash") == digest and fresh_enough:
+        return None
+    body = {"title": wp["title"], "content": "<!-- wp:html -->\n" + page + "\n<!-- /wp:html -->", "status": "publish",
+            "comment_status": "closed", "ping_status": "closed"}
+    if w["page_pw"]:
+        body["password"] = w["page_pw"]
+    slug = (env("WP_PAGE_SLUG") or wp["slug"]).strip().lower()
+    pid = mem.get("id")
+    res = None
+    if pid:
+        try:
+            res = _wp_call(w, "POST", "/wp/v2/pages/%s" % pid, body)
+        except WPError as e:
+            if "404" not in str(e):
+                raise
+            pid = None
+    if not pid:
+        found = _wp_find_page(w, slug)
+        if found:
+            pid = found["id"]
+            res = _wp_call(w, "POST", "/wp/v2/pages/%s" % pid, body)
+        else:
+            res = _wp_call(w, "POST", "/wp/v2/pages", dict(body, slug=slug))
+            pid = res.get("id")
+    if not pid:
+        raise WPError("il sito non ha restituito l'identificativo della pagina")
+    mem.update(id=pid, hash=digest, t=iso(now), link=res.get("link", ""))
+    _wp_cleanup_revisions(w, pid)
+    return res.get("link") or ""
+
+
+def cmd_check_wordpress(state, cfg):
+    try:
+        w = wp_settings()
+    except WPError as e:
+        log("❌ " + str(e))
+        step_summary("❌ " + str(e))
+        return 1
+    if not w:
+        msg = "Mancano i segreti WP_SITE_URL, WP_USER e WP_APP_PASSWORD (e, consigliato, WP_PAGE_PASSWORD)."
+        log(msg)
+        step_summary("❌ " + msg)
+        return 1
+    try:
+        me = _wp_call(w, "GET", "/wp/v2/users/me?context=edit")
+        caps = me.get("capabilities") or {}
+        log("Accesso riuscito come «%s»." % me.get("name"))
+        link = publish_wordpress(state, cfg, now_utc(), force=True)
+    except WPError as e:
+        log("❌ WordPress: %s" % e)
+        step_summary("❌ **WordPress**: %s" % e)
+        return 1
+    notes = []
+    if not caps.get("unfiltered_html"):
+        notes.append("⚠️ L'utente non può inserire codice (`unfiltered_html`): la pagina potrebbe apparire senza stile o senza filtri. Usa un utente Amministratore o Editor.")
+    if not w["page_pw"]:
+        notes.append("⚠️ Manca `WP_PAGE_PASSWORD`: la pagina sarebbe visibile a chiunque abbia il link.")
+    step_summary("✅ **WordPress** funziona. La pagina «%s» è stata creata o aggiornata: la trovi in WordPress → Pagine.\n\n%s" % (cfg["wordpress"]["title"], "\n\n".join(notes)))
+    log("✅ Pagina pubblicata (la trovi in WordPress → Pagine). L'indirizzo non viene scritto qui perché i log sono pubblici.")
+    for n in notes:
+        log(n)
+    return 0
+
+
 # --------------------------------------------------------------------------- commands
 def cmd_check_sources(cfg, include_disabled=False):
     now = now_utc()
@@ -1986,6 +2299,7 @@ def main(argv=None):
     ap.add_argument("--check-sources", action="store_true")
     ap.add_argument("--all", action="store_true", help="con --check-sources: prova anche le fonti disattivate")
     ap.add_argument("--check-llm", action="store_true")
+    ap.add_argument("--check-wordpress", action="store_true", help="prova il collegamento a WordPress e crea la pagina della rassegna")
     ap.add_argument("--test-notify", action="store_true")
     ap.add_argument("--telegram-chat-id", action="store_true")
     ap.add_argument("--digest-now", action="store_true", help="invia subito il riepilogo")
@@ -2012,6 +2326,8 @@ def main(argv=None):
     state = load_state(state_path)
     if args.check_llm:
         return cmd_check_llm(state, cfg)
+    if args.check_wordpress:
+        return cmd_check_wordpress(state, cfg)
     notifier = Notifier(dry=args.dry_run)
     if args.test_notify:
         return cmd_test_notify(notifier)
@@ -2060,6 +2376,12 @@ def main(argv=None):
         if "digest" in actions and not sent:
             notifier.send(simple_message("Il riepilogo è vuoto: non c'è niente in coda.", silent=True))
         state["last_run"] = iso(now)
+        if not args.dry_run:
+            try:
+                if publish_wordpress(state, cfg, now) is not None:
+                    log("  rassegna su WordPress aggiornata")
+            except WPError as e:
+                log("  [wordpress] rassegna non aggiornata: %s" % e)
         line = run_summary(stats, notifier.channels(), now)
         state.setdefault("control", {})["last_stats"] = ", ".join("%s=%s" % (k, v) for k, v in stats.items() if v) or "nessuna novità"
         log(line)
