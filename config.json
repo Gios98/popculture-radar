@@ -99,6 +99,18 @@
 
     { "name": "Reddit r/anime", "url": "https://www.reddit.com/r/anime/hot/.rss", "lang": "en", "tier": "community", "category": "anime", "enabled": false, "note": "Verificato il 5/11/2026: risponde solo a volte, Reddit blocca spesso (errore 429)" },
     { "name": "Reddit r/movies", "url": "https://www.reddit.com/r/movies/hot/.rss", "lang": "en", "tier": "community", "category": "film", "enabled": false },
-    { "name": "Reddit r/comicbooks", "url": "https://www.reddit.com/r/comicbooks/hot/.rss", "lang": "en", "tier": "community", "category": "fumetti", "enabled": false }
+    { "name": "Reddit r/comicbooks", "url": "https://www.reddit.com/r/comicbooks/hot/.rss", "lang": "en", "tier": "community", "category": "fumetti", "enabled": false },
+
+    {
+      "name": "Bluesky: Daily Cosmic Marvel",
+      "url": "https://bsky.app/profile/dailycosmicmarvel.bsky.social/rss",
+      "lang": "en", "tier": "community", "category": "film",
+      "note": "Account Bluesky (Marvel). Per aggiungerne altri copia questa riga e cambia il nome dopo /profile/."
+    },
+    {
+      "name": "Bluesky: Discussing Film",
+      "url": "https://bsky.app/profile/discussingfilm.net/rss",
+      "lang": "en", "tier": "community", "category": "film"
+    }
   ]
 }
