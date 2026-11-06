@@ -1457,7 +1457,8 @@ def process(items, cfg, state, now, rater, notifier):
     for it in items:
         if it.id in seen:
             continue
-        if now - it.published > max_age or any(rx.search(it.title) for rx in excl):
+        limit = dt.timedelta(hours=cfg["story_ttl_hours"]) if it.own else max_age  # i nostri articoli restano "visti" più a lungo
+        if now - it.published > limit or any(rx.search(it.title) for rx in excl):
             seen[it.id] = iso(now)
             stats["skipped"] += 1
             continue
