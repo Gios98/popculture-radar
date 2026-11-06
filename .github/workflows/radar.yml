@@ -1,8 +1,14 @@
 name: PopCulture Radar
 
+# COME FUNZIONA LA FREQUENZA
+# Il "cron" di GitHub non è affidabile: i giri programmati partono spesso con ore di ritardo o saltano.
+# Per questo ogni giro, finito il lavoro, aspetta fino a 5 minuti dal proprio avvio e lancia il giro successivo
+# (a catena). Il "cron" qui sotto serve solo da riserva: se la catena si interrompe, la riavvia.
+# ATTENZIONE: la catena parte SOLO se il repository è PUBBLICO (i minuti sono illimitati).
+# Se lo rendi di nuovo privato la catena si ferma da sola e resta solo il cron (ogni 30 minuti).
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -20,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: popculture-radar
@@ -28,7 +35,7 @@ concurrency:
 jobs:
   radar:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PYTHONUNBUFFERED: "1"
       MODE: ${{ github.event.inputs.mode || 'run' }}
@@ -41,6 +48,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Segna l'ora di partenza
+        run: echo "RADAR_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      # La memoria del Radar (notizie già viste) vive su un branch separato "radar-state",
+      # così non sporca la cronologia del progetto.
       - name: Carica la memoria
         env:
           GH_TOKEN: ${{ github.token }}
@@ -71,7 +83,7 @@ jobs:
           esac
 
       - name: Salva la memoria
-        if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now') }}
+        if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now' || github.event.inputs.mode == '') }}
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/radar-state"
@@ -85,3 +97,21 @@ jobs:
             git commit --quiet --allow-empty -m "radar state"
           fi
           git push --quiet --force origin radar-state
+
+      # Giro successivo a catena: solo per i giri normali, solo se il repository è pubblico
+      # e solo se il giro non è stato annullato a mano (annullare un giro ferma la catena).
+      - name: Aspetta e lancia il giro successivo
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == '') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PRIVATE=$(gh repo view --json isPrivate -q .isPrivate || echo true)
+          if [ "$PRIVATE" != "false" ]; then
+            echo "Repository privato (o non verificabile): la catena si ferma per non consumare i minuti gratuiti."
+            exit 0
+          fi
+          ELAPSED=$(( $(date +%s) - RADAR_START ))
+          WAIT=$(( 300 - ELAPSED ))
+          if [ "$WAIT" -gt 0 ]; then sleep "$WAIT"; fi
+          gh workflow run radar.yml --ref "${GITHUB_REF_NAME:-main}" -f mode=run
