@@ -1407,6 +1407,23 @@ def retry_pending(state, notifier, now):
     state["pending"] = keep
 
 
+def print_report(state, cfg):
+    """Mostra come è stata giudicata ogni notizia di questo giro, per capire perché un avviso è partito o no."""
+    rep = state.get("_report") or {}
+    if not rep:
+        return
+    rows = sorted(rep.values(), key=lambda x: -x[0])[:30]
+    thr = float(((state.get("control") or {}).get("threshold")) or cfg["thresholds"]["notify"])
+    lines = ["### Come sono state giudicate le notizie (soglia avviso: %g)" % thr, "",
+             "| Punti | Esito | Titolo | Letto | Impatto / Pubblico / Traffico |", "|---|---|---|---|---|"]
+    for score, r, outcome in rows:
+        deep = {True: "📖 sì", False: "solo anteprima"}.get(r.get("deep"), "—")
+        title = (r.get("headline_it") or "?").replace("|", "/")
+        lines.append("| %.1f | %s | %s | %s | %.0f / %.0f / %.0f |" % (score, outcome, title[:90], deep, r["impact"], r["audience_fit"], r["traffic"]))
+        log("  %4.1f  %-30s %s" % (score, outcome, title[:80]))
+    step_summary("\n".join(lines))
+
+
 def deep_read(to_rate, ratings, rater, cfg, now, stats):
     """Per le notizie che sembrano interessanti legge l'articolo intero e le rivaluta."""
     dcfg, fn = cfg["deep_read"], getattr(rater, "deep", None)
@@ -1497,6 +1514,7 @@ def process(items, cfg, state, now, rater, notifier):
     notify_thr = float(ctl.get("threshold") or thr["notify"])
     muted = is_muted(state, now)
     alerts = []
+    report = state["_report"] = {}
     for c in to_rate:
         r = ratings.get(c.cid)
         if r is None:
@@ -1520,13 +1538,17 @@ def process(items, cfg, state, now, rater, notifier):
         if r["ignore"]:
             st["ignored"] = True
             stats["ignored"] += 1
+            report[st["id"]] = (sc["score"], r, "scartata (non pertinente)")
             continue
+        report[st["id"]] = (sc["score"], r, "sotto soglia, non inviata")
         force = r["impact"] >= float(thr["force_notify_impact"]) and r["reliability"] in ("ufficiale", "trade")
         if sc["score"] >= notify_thr or force:
             alerts.append(st)
+            report[st["id"]] = (sc["score"], r, "AVVISO")
         elif sc["score"] >= float(thr["digest_min"]):
             queue_digest(state, st, now)
             stats["digest"] += 1
+            report[st["id"]] = (sc["score"], r, "nel riepilogo serale")
 
     alerts.sort(key=lambda s: -s["score"])
     quiet = in_quiet_hours(now.astimezone(get_tz(cfg)), cfg["quiet_hours"])
@@ -1534,6 +1556,7 @@ def process(items, cfg, state, now, rater, notifier):
         if k >= cfg["max_notifications_per_run"]:
             queue_digest(state, st, now, extra=True)
             stats["digest"] += 1
+            report[st["id"]] = (st["score"], st["rating"], "nel riepilogo (troppi avvisi)")
             continue
         silent = muted or (quiet and st["score"] < float(cfg["quiet_hours"]["override_score"]))
         msg = build_alert_message(st, silent)
@@ -1951,6 +1974,7 @@ def main(argv=None):
             return 0
         items = collect(cfg, state, now)
         stats = process(items, cfg, state, now, rater, notifier)
+        print_report(state, cfg)
         sent = maybe_send_digest(cfg, state, now, notifier, force="digest" in actions)
         if "digest" in actions and not sent:
             notifier.send(simple_message("Il riepilogo è vuoto: non c'è niente in coda.", silent=True))
