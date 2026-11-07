@@ -1802,7 +1802,7 @@ def poll_commands(cfg, state, notifier, now):
     except (HttpError, ValueError) as e:
         log("  [telegram] comandi non letti: %s" % e)
         return set()
-    actions = set()
+    actions, told = set(), set()
     log("  [telegram] messaggi in attesa: %d (offset %s)" % (len(updates), ctl.get("offset", 0)))
     if not updates:
         try:  # se sul bot c'è un "webhook", Telegram non consegna i messaggi a getUpdates
@@ -1825,6 +1825,17 @@ def poll_commands(cfg, state, notifier, now):
             log("  [telegram] messaggio ignorato (chat …%s%s, %s)" % (
                 chat[-3:], " NON autorizzata" if chat not in notifier.tg_chats else "",
                 "non è un comando" if not text.startswith("/") else "comando"))
+            if chat not in notifier.tg_chats and text.startswith("/") and chat not in told:
+                told.add(chat)  # una sola risposta per chat a ogni giro; l'id lo vede solo chi ha scritto
+                try:
+                    notifier._telegram(chat, simple_message(
+                        "Questa chat non è collegata al Radar, quindi non eseguo i comandi.\n"
+                        "L'id di questa chat è: %s\n"
+                        "Se vuoi usarla: su GitHub, Settings → Secrets and variables → Actions → TELEGRAM_CHAT_ID, "
+                        "e metti questo numero (se c'è già un valore, scrivi i due numeri separati da una virgola)." % chat,
+                        silent=True))
+                except HttpError:
+                    pass
             continue  # solo tu (la chat configurata) puoi dare comandi
         reply, action = handle_command(text, cfg, state, now)
         log("  comando: %s" % text.split()[0])
