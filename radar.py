@@ -91,6 +91,7 @@ DEFAULT_CONFIG = {
     "digest": {"enabled": True, "hour": 20, "max_items": 15},
     "quiet_hours": {"enabled": True, "start": "00:30", "end": "07:30", "override_score": 9.0},
     "weights": {"impact": 0.45, "audience_fit": 0.35, "traffic": 0.20},
+    "insider_reliability": 0.95,
     "reliability_factor": {"ufficiale": 1.0, "trade": 0.95, "stampa": 0.85, "rumor": 0.75, "opinione": 0.4},
     "freshness_steps": [[60, 1.0], [180, 0.95], [360, 0.85], [720, 0.7], [100000, 0.5]],
     "saturation_steps": [[1, 1.0], [2, 0.95], [4, 0.85], [7, 0.7], [999, 0.55]],
@@ -353,6 +354,7 @@ class Item:
     category: str
     own: bool = False
     tokens: frozenset = field(default_factory=frozenset)
+    insider: bool = False
 
 
 def norm_text(s: str) -> str:
@@ -460,7 +462,7 @@ def parse_feed(raw: bytes, src: dict, now: dt.datetime, max_items: int = 30):
             title=title, link=link, summary=summary, published=pub,
             source=src["name"], lang=src.get("lang", "en"), tier=src.get("tier", "major"),
             category=src.get("category", "altro"), own=bool(src.get("own")),
-            tokens=title_tokens(title),
+            tokens=title_tokens(title), insider=bool(src.get("insider")),
         ))
     return items
 
@@ -1185,6 +1187,8 @@ def compute_score(r, c: Cluster, now, cfg):
     tot = sum(w.values())
     base = (w["impact"] * r["impact"] + w["audience_fit"] * r["audience_fit"] + w["traffic"] * r["traffic"]) / tot
     rel = float(cfg["reliability_factor"].get(r["reliability"], 0.85))
+    if any(i.insider for i in c.items) and r["reliability"] != "opinione":
+        rel = max(rel, float(cfg.get("insider_reliability", 0.95)))  # account scelti da voi come insider: non valgono "rumor"
     age_min = max(0.0, (now - c.rep.published).total_seconds() / 60.0)
     fresh = step(age_min, cfg["freshness_steps"])
     sat = step(c.n_sources, cfg["saturation_steps"])

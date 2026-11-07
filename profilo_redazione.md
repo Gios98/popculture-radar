@@ -15,6 +15,7 @@ Non abbiamo franchise preferiti: ci interessa TUTTO ciò che appartiene a queste
 
 ## Priorità ALTA (audience_fit 8-10)
 - Annunci ufficiali, trailer e date di uscita di film, serie e giochi molto attesi, soprattutto se con uscita in Italia.
+- **Materiale promozionale dei titoli molto attesi**: promo art, prime immagini (first look), character poster, key art, teaser, spot, foto dal set, nuovi personaggi e conferma di cast e team-up (per esempio *Avengers: Doomsday*, i grandi film Marvel/DC/Star Wars, le serie di punta, i grandi giochi). Sono notizie importanti per il nostro pubblico: impatto alto (7-9), `traffic` alto (8-9), anche se la fonte è un singolo account social affidabile. Un'immagine nuova di un titolo atteso non è un contenuto minore.
 - Casting e regia di film e serie di grande richiamo; cancellazioni, rinvii e rinnovi clamorosi.
 - Showcase ed eventi dei giochi (annunci, remake, nuovi capitoli di saghe famose), nuove console e novità sulle piattaforme.
 - Fumetti: grandi novità Marvel, DC, Image, Bonelli e di qualsiasi grande editore; autori importanti; adattamenti cinematografici e televisivi di fumetti.
@@ -38,7 +39,7 @@ Non abbiamo franchise preferiti: ci interessa TUTTO ciò che appartiene a queste
 - Notizie già vecchie o ripetute senza novità reali.
 
 ## Cosa ci piace cavalcare (traffic alto)
-- Casting a sorpresa, prime immagini e primi trailer di film, serie e giochi molto attesi.
+- Casting a sorpresa, prime immagini, promo art, poster e primi trailer di film, serie e giochi molto attesi.
 - Date di uscita e novità sulle uscite in Italia.
 - "Cosa ricordare prima di vedere/giocare": approfondimenti per chi sta per iniziare una nuova stagione o un nuovo capitolo (per esempio le serie che tornano), e "cosa sapere prima di vederlo in sala".
 - "Cosa sappiamo finora" su titoli in arrivo e confronti tra versione fumetto/libro/gioco e adattamento.

@@ -33,6 +33,7 @@
     "traffic": 0.20
   },
 
+  "insider_reliability": 0.95,
   "reliability_factor": {
     "ufficiale": 1.0,
     "trade": 0.95,
@@ -104,13 +105,13 @@
     {
       "name": "Bluesky: Daily Cosmic Marvel",
       "url": "https://bsky.app/profile/dailycosmicmarvel.bsky.social/rss",
-      "lang": "en", "tier": "community", "category": "film",
-      "note": "Account Bluesky (Marvel). Per aggiungerne altri copia questa riga e cambia il nome dopo /profile/."
+      "lang": "en", "tier": "community", "category": "film", "insider": true,
+      "note": "Account Bluesky (Marvel). \"insider\": true = account scelto da voi: la sua affidabilità non scende sotto 0,95. Per aggiungerne altri copia questa riga e cambia il nome dopo /profile/."
     },
     {
       "name": "Bluesky: Discussing Film",
       "url": "https://bsky.app/profile/discussingfilm.net/rss",
-      "lang": "en", "tier": "community", "category": "film"
+      "lang": "en", "tier": "community", "category": "film", "insider": true
     }
   ]
 }
