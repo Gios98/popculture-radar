@@ -2,7 +2,7 @@ name: PopCulture Radar
 
 # COME FUNZIONA LA FREQUENZA
 # Il "cron" di GitHub non è affidabile: i giri programmati partono spesso con ore di ritardo o saltano.
-# Per questo ogni giro, finito il lavoro, aspetta fino a 5 minuti dal proprio avvio e lancia il giro successivo
+# Per questo ogni giro, finito il lavoro, aspetta fino a 10 minuti dal proprio avvio e lancia il giro successivo
 # (a catena). Il "cron" qui sotto serve solo da riserva: se la catena si interrompe, la riavvia.
 # ATTENZIONE: la catena parte SOLO se il repository è PUBBLICO (i minuti sono illimitati).
 # Se lo rendi di nuovo privato la catena si ferma da sola e resta solo il cron (ogni 30 minuti).
@@ -48,6 +48,7 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
       WP_USER: ${{ secrets.WP_USER }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
@@ -121,6 +122,6 @@ jobs:
             exit 0
           fi
           ELAPSED=$(( $(date +%s) - RADAR_START ))
-          WAIT=$(( 300 - ELAPSED ))
+          WAIT=$(( 600 - ELAPSED ))
           if [ "$WAIT" -gt 0 ]; then sleep "$WAIT"; fi
           gh workflow run radar.yml --ref "${GITHUB_REF_NAME:-main}" -f mode=run
