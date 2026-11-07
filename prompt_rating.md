@@ -23,6 +23,15 @@ Ricevi per ogni notizia: titolo, riassunto, elenco delle fonti che l'hanno già 
 - `rumor`: indiscrezione, leak, "secondo fonti", "pare che", nessuna conferma.
 - `opinione`: editoriale, classifica, analisi, teoria dei fan, recensione.
 
+**category** — La categoria è il TIPO DI OPERA di cui parla la notizia, non la testata che la pubblica (una testata di fumetti può parlare di un film, una di videogiochi di una serie TV). Scegli quella dell'opera al centro della notizia:
+- `film`: film in sala o in streaming, sequel, cast e regia di un film, box office, festival, anche se tratto da un fumetto, un romanzo o un videogioco (un film Marvel o un film tratto da un racconto di Stephen King è `film`).
+- `serie_tv`: serie e miniserie di qualsiasi piattaforma, rinnovi, cancellazioni, cast di una serie (anche se tratta da un fumetto, un anime o un gioco).
+- `videogiochi`: giochi, console, studi, showcase, DLC, anche per giochi tratti da film o serie.
+- `fumetti`: fumetti, graphic novel, autori ed editori di fumetti, edizioni e fiere dei fumetti; i manga vanno qui se la notizia riguarda l'edizione o l'autore del fumetto.
+- `anime`: solo le notizie sugli anime come prodotto televisivo o cinematografico d'animazione (stagioni, film, studi). `manga`: solo se la notizia riguarda specificamente un manga e non rientra in `fumetti`.
+- `altro`: tutto ciò che non è chiaramente una di queste (eventi trasversali, mercato, curiosità).
+Se la notizia riguarda sia un fumetto sia il suo adattamento (per esempio "il film tratto dal fumetto"), vale l'opera su cui cade la notizia: il film è `film`, il fumetto originale è `fumetti`.
+
 **ignore** — Metti `true` se non è una notizia da pubblicare: offerte e sconti, guide all'acquisto, guide e soluzioni di videogiochi, "come guardare", listicle senza novità, recensioni, contenuti SEO di riempimento, argomenti fuori dalla cultura pop.
 
 ## Cosa NON devi valutare
