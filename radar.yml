@@ -2,7 +2,7 @@ name: PopCulture Radar
 
 # COME FUNZIONA LA FREQUENZA
 # Il "cron" di GitHub non è affidabile: i giri programmati partono spesso con ore di ritardo o saltano.
-# Per questo ogni giro, finito il lavoro, aspetta fino a 5 minuti dal proprio avvio e lancia il giro successivo
+# Per questo ogni giro, finito il lavoro, aspetta fino a 10 minuti dal proprio avvio e lancia il giro successivo
 # (a catena). Il "cron" qui sotto serve solo da riserva: se la catena si interrompe, la riavvia.
 # ATTENZIONE: la catena parte SOLO se il repository è PUBBLICO (i minuti sono illimitati).
 # Se lo rendi di nuovo privato la catena si ferma da sola e resta solo il cron (ogni 30 minuti).
@@ -20,6 +20,7 @@ on:
           - dry-run
           - check-sources
           - check-llm
+          - check-wordpress
           - test-notify
           - chat-id
           - digest-now
@@ -28,8 +29,10 @@ permissions:
   contents: write
   actions: write
 
+# I giri normali (e il riepilogo) fanno la fila uno alla volta. Le prove manuali (check-sources, check-llm,
+# check-wordpress, ...) hanno un gruppo tutto loro, così non vengono annullate dalla catena dei giri.
 concurrency:
-  group: popculture-radar
+  group: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now' || github.event.inputs.mode == '') && 'popculture-radar' || format('popculture-radar-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
@@ -45,6 +48,12 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+      WP_USER: ${{ secrets.WP_USER }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      WP_PAGE_PASSWORD: ${{ secrets.WP_PAGE_PASSWORD }}
+      WP_PAGE_SLUG: ${{ secrets.WP_PAGE_SLUG }}
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +85,7 @@ jobs:
             dry-run)        python3 radar.py --dry-run ;;
             check-sources)  python3 radar.py --check-sources --all ;;
             check-llm)      python3 radar.py --check-llm ;;
+            check-wordpress) python3 radar.py --check-wordpress ;;
             test-notify)    python3 radar.py --test-notify ;;
             chat-id)        python3 radar.py --telegram-chat-id ;;
             digest-now)     python3 radar.py --digest-now ;;
@@ -112,6 +122,6 @@ jobs:
             exit 0
           fi
           ELAPSED=$(( $(date +%s) - RADAR_START ))
-          WAIT=$(( 300 - ELAPSED ))
+          WAIT=$(( 600 - ELAPSED ))
           if [ "$WAIT" -gt 0 ]; then sleep "$WAIT"; fi
           gh workflow run radar.yml --ref "${GITHUB_REF_NAME:-main}" -f mode=run
