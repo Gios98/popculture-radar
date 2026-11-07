@@ -1803,6 +1803,16 @@ def poll_commands(cfg, state, notifier, now):
         log("  [telegram] comandi non letti: %s" % e)
         return set()
     actions = set()
+    log("  [telegram] messaggi in attesa: %d (offset %s)" % (len(updates), ctl.get("offset", 0)))
+    if not updates:
+        try:  # se sul bot c'è un "webhook", Telegram non consegna i messaggi a getUpdates
+            info = (json.loads(http(base + "getWebhookInfo", timeout=20)).get("result") or {})
+            if info.get("url"):
+                log("  [telegram] ATTENZIONE: sul bot è attivo un webhook, i comandi non possono arrivare al Radar")
+            if info.get("pending_update_count"):
+                log("  [telegram] Telegram dichiara %s messaggi in coda" % info["pending_update_count"])
+        except (HttpError, ValueError):
+            pass
     for u in updates:
         if not isinstance(u, dict) or "update_id" not in u:
             continue
@@ -1811,6 +1821,10 @@ def poll_commands(cfg, state, notifier, now):
         chat = str((m.get("chat") or {}).get("id"))
         text = (m.get("text") or "").strip()
         if chat not in notifier.tg_chats or not text.startswith("/"):
+            # diagnostica: il log è pubblico, quindi dell'id chat mostro solo le ultime 3 cifre
+            log("  [telegram] messaggio ignorato (chat …%s%s, %s)" % (
+                chat[-3:], " NON autorizzata" if chat not in notifier.tg_chats else "",
+                "non è un comando" if not text.startswith("/") else "comando"))
             continue  # solo tu (la chat configurata) puoi dare comandi
         reply, action = handle_command(text, cfg, state, now)
         log("  comando: %s" % text.split()[0])
