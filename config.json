@@ -70,6 +70,14 @@
     { "name": "Collider", "url": "https://collider.com/feed/", "lang": "en", "tier": "major", "category": "film" },
     { "name": "Screen Rant", "url": "https://screenrant.com/feed/", "lang": "en", "tier": "major", "category": "film" },
     { "name": "SlashFilm", "url": "https://www.slashfilm.com/feed/", "lang": "en", "tier": "major", "category": "film" },
+    {
+      "name": "Google News: Intrattenimento (USA)",
+      "url": "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNREoyZUc0U0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en",
+      "lang": "en", "tier": "blog", "category": "film", "google_news": true,
+      "note": "Aggiunta il 10/11/2026. Google News raccoglie notizie di moltissime testate: nel Radar compare la testata vera. Gli articoli non sono leggibili per intero (link di Google): restano 'solo anteprima' se nessun'altra fonte li ha."
+    },
+    { "name": "TheWrap", "url": "https://www.thewrap.com/feed/", "lang": "en", "tier": "trade", "category": "film", "note": "Aggiunta il 10/11/2026: l'indirizzo del feed va verificato con check-sources" },
+    { "name": "IndieWire", "url": "https://www.indiewire.com/feed/", "lang": "en", "tier": "major", "category": "film", "note": "Aggiunta il 10/11/2026: l'indirizzo del feed va verificato con check-sources" },
     { "name": "TVLine", "url": "https://tvline.com/feed/", "lang": "en", "tier": "major", "category": "serie_tv" },
 
     { "name": "Polygon", "url": "https://www.polygon.com/rss/index.xml", "lang": "en", "tier": "major", "category": "videogiochi" },
