@@ -112,6 +112,11 @@
       "name": "Bluesky: Discussing Film",
       "url": "https://bsky.app/profile/discussingfilm.net/rss",
       "lang": "en", "tier": "community", "category": "film", "insider": true
+    },
+    {
+      "name": "Bluesky: Every Film Now",
+      "url": "https://bsky.app/profile/everyfilmnow.bsky.social/rss",
+      "lang": "en", "tier": "community", "category": "film", "insider": true
     }
   ]
 }
