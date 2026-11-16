@@ -1,5 +1,8 @@
 name: PopCulture Radar
 
+# Nell'elenco dei giri compare la modalità (run, scheduled, check-sources...) invece di "Manually run by..."
+run-name: ${{ github.event.inputs.mode || (github.event_name == 'schedule' && 'scheduled') || 'run' }}
+
 # COME FUNZIONA LA FREQUENZA
 # Il "cron" di GitHub non è affidabile: i giri programmati partono spesso con ore di ritardo o saltano.
 # Per questo, a ogni giro, un secondo lavoro ("prossimo") aspetta fino a 10 minuti dall'avvio e lancia il giro successivo
@@ -32,7 +35,7 @@ permissions:
 # I giri normali (e il riepilogo) fanno la fila uno alla volta. Le prove manuali (check-sources, check-llm,
 # check-wordpress, ...) hanno un gruppo tutto loro, così non vengono annullate dalla catena dei giri.
 concurrency:
-  group: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now' || github.event.inputs.mode == '') && 'popculture-radar' || format('popculture-radar-{0}', github.run_id) }}
+  group: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == 'digest-now' || github.event.inputs.mode == '') && 'popculture-radar-b' || format('popculture-radar-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
@@ -129,6 +132,13 @@ jobs:
           ELAPSED=$(( $(date +%s) - START ))
           WAIT=$(( 600 - ELAPSED ))
           if [ "$WAIT" -gt 0 ]; then sleep "$WAIT"; fi
+          # Se esiste già un giro normale più recente di questo (in coda o in corso), un'altra catena è attiva: non ne apro una seconda.
+          NEWER=$(gh run list --workflow radar.yml --limit 30 --json databaseId,status,displayTitle \
+            --jq "[.[] | select(.databaseId > $GITHUB_RUN_ID) | select(.status==\"queued\" or .status==\"in_progress\" or .status==\"waiting\" or .status==\"pending\") | select(.displayTitle==\"run\" or .displayTitle==\"scheduled\")] | length" 2>/dev/null || echo 0)
+          if [ "${NEWER:-0}" -gt 0 ] 2>/dev/null; then
+            echo "Un'altra catena è già attiva ($NEWER giro/i più recenti): non lancio un altro giro."
+            exit 0
+          fi
           for i in 1 2 3 4; do
             if gh workflow run radar.yml --ref "${GITHUB_REF_NAME:-main}" -f mode=run; then
               echo "Giro successivo lanciato."
