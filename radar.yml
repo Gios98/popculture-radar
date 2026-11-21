@@ -115,7 +115,7 @@ jobs:
     needs: radar
     if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event.inputs.mode == 'run' || github.event.inputs.mode == '') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Aspetta e lancia il giro successivo
         env:
@@ -139,13 +139,16 @@ jobs:
             echo "Un'altra catena è già attiva ($NEWER giro/i più recenti): non lancio un altro giro."
             exit 0
           fi
-          for i in 1 2 3 4; do
+          # Se GitHub ha un guasto momentaneo (per esempio HTTP 503), riprovo a lungo con attese crescenti (circa 8 minuti in tutto).
+          i=0
+          for DELAY in 0 15 30 60 90 120 180; do
+            i=$((i+1))
+            sleep "$DELAY"
             if gh workflow run radar.yml --ref "${GITHUB_REF_NAME:-main}" -f mode=run; then
-              echo "Giro successivo lanciato."
+              echo "Giro successivo lanciato (tentativo $i)."
               exit 0
             fi
-            echo "Lancio non riuscito (tentativo $i), riprovo tra 20 secondi."
-            sleep 20
+            echo "Lancio non riuscito (tentativo $i): riprovo."
           done
           echo "Non sono riuscito a lanciare il giro successivo: lo riavvierà il controllo di sicurezza."
           exit 1
